@@ -3,12 +3,12 @@ package functions;
 import com.google.cloud.functions.HttpFunction;
 import com.google.cloud.functions.HttpRequest;
 import com.google.cloud.functions.HttpResponse;
+import functions.cache.Cache;
+import functions.cache.UIContent;
 import org.json.simple.JSONObject;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -40,23 +40,32 @@ public class Main implements HttpFunction {
         StringBuilder result = new StringBuilder(getForm()).append("\n");
 
         try {
-            JSONObject json = new JSONObject();
-            json.put("url", url);
-            Map<String, String> frequencies = Client.getData(frequencyGeneratorURL, json);
-
-            json.put("frequencies", frequencies.get("frequencies"));
-            String imageURL = Client.getData(histogramGeneratorURL, json).get("histogramURL").trim();
-
-            String frequencyDistribution = frequencies.get("aggregatedFrequencies");
-            result.append("<body>\n").append("<img src=\"").append(imageURL).append("\" alt=\"Histogram image\">\n")
+            UIContent uiContent = getUIContent(url);
+            result.append("<body>\n").append("<img src=\"").append(uiContent.getImageURL()).append("\" alt=\"Histogram image\">\n")
                     .append("\t</b>\n").append("\t</b>\n")
                     .append("\t<div>Frequency distribution for sentence lengths: (Format - {Sentence length: Number of occurrences})\" </div>\n")
-                    .append("\t<div>").append(frequencyDistribution).append("</div>\n")
+                    .append("\t<div>").append(uiContent.getAggregatedFrequencies()).append("</div>\n")
                     .append("</body>");
         } catch (IOException e) {
             e.printStackTrace();
         }
 
         return result.toString();
+    }
+
+    private UIContent getUIContent(String url) throws IOException {
+        if(!Cache.isUIContentCached(url)) {
+            JSONObject json = new JSONObject();
+            json.put("url", url);
+            Map<String, String> frequencies = Client.getData(frequencyGeneratorURL, json);
+
+            json.put("frequencies", frequencies.get("frequencies"));
+            String imageURL = Client.getData(histogramGeneratorURL, json).get("histogramURL").trim();
+            String aggregatedFrequencies = frequencies.get("aggregatedFrequencies");
+
+            Cache.addUIContent(url, imageURL, aggregatedFrequencies);
+        }
+
+        return Cache.getUIContent(url);
     }
 }
