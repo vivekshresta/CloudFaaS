@@ -15,6 +15,7 @@ import java.util.Optional;
 public class Main implements HttpFunction {
     private String frequencyGeneratorURL = "https://us-central1-vivekshresta-bandaru.cloudfunctions.net/frequency-function";
     private String histogramGeneratorURL = "https://us-central1-vivekshresta-bandaru.cloudfunctions.net/histogram_function";
+    private Cache cache = new Cache();
 
     @Override
     public void service(HttpRequest request, HttpResponse response) throws IOException {
@@ -25,7 +26,7 @@ public class Main implements HttpFunction {
         if(url.isEmpty())
             out.write(getForm());
         else
-            out.write(getFinalPage(url.get()));
+            out.write(getFinalPage(url.get().trim()));
     }
 
     private String getForm() {
@@ -40,10 +41,13 @@ public class Main implements HttpFunction {
         StringBuilder result = new StringBuilder(getForm()).append("\n");
 
         try {
+            long initialTime = System.currentTimeMillis();
             UIContent uiContent = getUIContent(url);
             result.append("<body>\n").append("<img src=\"").append(uiContent.getImageURL()).append("\" alt=\"Histogram image\">\n")
-                    .append("\t</b>\n").append("\t</b>\n")
-                    .append("\t<div>Frequency distribution for sentence lengths: (Format - {Sentence length: Number of occurrences})\" </div>\n")
+                    .append("<br>")
+                    .append("\t<div>The time taken to generate the frequency distribution and histogram: ").append(System.currentTimeMillis() - initialTime).append(" ms</div>\n")
+                    .append("<br>")
+                    .append("\t<div><b>Frequency distribution for sentence lengths:</b> (Format - Sentence length: Number of occurrences)\" </div>\n")
                     .append("\t<div>").append(uiContent.getAggregatedFrequencies()).append("</div>\n")
                     .append("</body>");
         } catch (IOException e) {
@@ -54,7 +58,8 @@ public class Main implements HttpFunction {
     }
 
     private UIContent getUIContent(String url) throws IOException {
-        if(!Cache.isUIContentCached(url)) {
+        UIContent uiContent = cache.getUIContent(url);
+        if(uiContent == null) {
             JSONObject json = new JSONObject();
             json.put("url", url);
             Map<String, String> frequencies = Client.getData(frequencyGeneratorURL, json);
@@ -63,9 +68,10 @@ public class Main implements HttpFunction {
             String imageURL = Client.getData(histogramGeneratorURL, json).get("histogramURL").trim();
             String aggregatedFrequencies = frequencies.get("aggregatedFrequencies");
 
-            Cache.addUIContent(url, imageURL, aggregatedFrequencies);
+            cache.addUIContent(url, imageURL, aggregatedFrequencies);
+            uiContent = new UIContent(imageURL, aggregatedFrequencies);
         }
 
-        return Cache.getUIContent(url);
+        return uiContent;
     }
 }
